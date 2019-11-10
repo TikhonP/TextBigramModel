@@ -1,7 +1,8 @@
 from sys import argv, stdout
 from collections import Counter
 import numpy as np
-from random import choice
+from sklearn.feature_extraction.text import CountVectorizer
+from numpy.random import choice, rand
 
 
 class myarray(np.ndarray):
@@ -11,7 +12,7 @@ class myarray(np.ndarray):
         return np.where(self == value)
 
 
-class bigramModel:
+class badBigramModel:
     def __init__(self, punctuation):
         self.punctuation = punctuation
 
@@ -69,29 +70,55 @@ class bigramModel:
         return outstring
 
 
-print('\n----------------------------\nTikhonSystems\n----------------------------')
-print('\nЗапуск\n')
 
-script, filename, textlenth = argv
-textlenth = int(textlenth)
 
-print('Открытие файла ...\n')
-str = ((open(filename)).read()).lower()
-punctuation = ['.',',',':',';','!','?','(',')', '-', '--', '\"', '{', '}']
+class goodBigramModel:
+    def __init__(self, n_grams=4):
+        self.n_grams = n_grams
+        self.vectorizer = CountVectorizer (ngram_range=(1,self.n_grams))
 
-print('Инициализация модели ...\n')
-textGenerator = bigramModel(punctuation)
 
-print('Обучение модели ...')
-textGenerator.fit(str)
+    def fit(self, string):
+        data = ['']
+        data[0] = string
 
-print('\n\nГенерация текста ...')
-predictedString = textGenerator.predict(textlenth)
+        counts = self.vectorizer.fit_transform(data)
+        counts = np.array(counts.sum(axis=0))[0]
 
-print('\nЗапись сгенерированного текста в файл ...\n')
-outputfile = open('output.txt', 'w')
-outputfile.write(predictedString)
-outputfile.close()
+        feature_names = self.vectorizer.get_feature_names()
 
-print('Сгенерированный текст:\n')
-print(predictedString, '\n')
+        self.continuations = {}
+
+        for ngram, count in zip(feature_names, counts):
+            words = ngram.split()
+            prv = ' '.join(words[:-1])
+            nxt = words[-1]
+            if prv not in self.continuations:
+                self.continuations[prv] = {}
+            self.continuations[prv][nxt] = count
+
+
+    def predict(self, length):
+        text = ''
+
+        for j in range(length):
+            for i in range(-(self.n_grams-1), -1):
+                cur_prefix = ' '.join(text.split()[i:])
+                if cur_prefix not in self.continuations:
+                    continue
+                options = list(self.continuations[cur_prefix].items())
+                words = [option[0] for option in options]
+
+                probilities = np.array([option[1] for option in options])
+                probilities = probilities / probilities.sum()
+
+                prob = rand()
+                k = 0
+                while prob > probilities[k]:
+                    prob -= probilities[k]
+                    k += 1
+
+                text += ' ' + words[k]
+                break
+
+        return text
